@@ -80,36 +80,24 @@ export default function ChatPage() {
 
     console.log(`Fetching messages between ${user.id} and ${selectedUser.id}`);
     
-    // Use the database function to get conversation messages
-    const { data, error } = await supabase.rpc('get_conversation_messages', {
-      other_user_id: selectedUser.id
-    });
-    
+    // Fetch messages for this conversation directly
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(
+        `and(sender_id.eq.${user.id},receiver_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},receiver_id.eq.${user.id})`
+      )
+      .order('timestamp', { ascending: true });
+
     if (error) {
-      console.error('Error fetching messages:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      console.error('Selected user ID:', selectedUser.id);
-      console.error('Current user ID:', user.id);
+      console.error('Error fetching messages:', error.message, error.code);
     } else {
       console.log(`Fetched ${data?.length || 0} messages`);
-      // Map message_timestamp back to timestamp for the interface and ensure is_sent_by_me is set
-      const mappedMessages = (data || []).map((msg: MessagePayload & { message_timestamp?: string; is_sent_by_me?: boolean }) => ({
+      const mappedMessages = (data || []).map((msg: MessagePayload) => ({
         ...msg,
-        timestamp: msg.message_timestamp || msg.timestamp,
-        // Ensure is_sent_by_me is always set correctly
-        is_sent_by_me: msg.is_sent_by_me !== undefined ? msg.is_sent_by_me : msg.sender_id === user.id
+        is_sent_by_me: msg.sender_id === user.id
       }));
       setMessages(mappedMessages);
-      
-      // Debug: Log first few messages to check is_sent_by_me values
-      if (mappedMessages.length > 0) {
-        console.log('Sample messages with is_sent_by_me:', mappedMessages.slice(0, 3).map((m: Message) => ({
-          id: m.id,
-          sender_id: m.sender_id,
-          is_sent_by_me: m.is_sent_by_me,
-          content: m.content?.substring(0, 20)
-        })));
-      }
     }
   }, [selectedUser, user, supabase]);
 
@@ -551,11 +539,20 @@ export default function ChatPage() {
   // Handle user selection and mark messages as read
   const handleUserSelect = async (selectedUser: ChatUser) => {
     console.log('User selected:', selectedUser);
-    
+
     // Clear broadcast group state when selecting an individual user
     setBroadcastGroupId(null);
     setBroadcastGroupName(null);
-    
+
+    // Ensure the user appears in the sidebar even if they have no messages yet
+    // (newly created contacts are not returned by user_conversations view until first message)
+    setUsers(prev => {
+      if (!prev.find(u => u.id === selectedUser.id)) {
+        return [selectedUser, ...prev];
+      }
+      return prev;
+    });
+
     setSelectedUser(selectedUser);
     
     // Immediately clear unread count in UI for better UX

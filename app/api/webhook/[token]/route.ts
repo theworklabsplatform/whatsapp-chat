@@ -1,8 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { downloadAndUploadToS3 } from '@/lib/aws-s3';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 export const runtime = 'nodejs';
+
+/**
+ * Verify WhatsApp webhook signature using X-Hub-Signature-256 header.
+ * Requires META_APP_SECRET environment variable to be set.
+ * If META_APP_SECRET is not set, verification is skipped (not recommended for production).
+ */
+async function verifyWebhookSignature(request: NextRequest, rawBody: string): Promise<boolean> {
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appSecret) {
+    // Skip verification if no app secret configured — log warning in production
+    console.warn('META_APP_SECRET not set — skipping webhook signature verification');
+    return true;
+  }
+
+  const signature = request.headers.get('x-hub-signature-256');
+  if (!signature) {
+    console.error('Missing X-Hub-Signature-256 header');
+    return false;
+  }
+
+  const expected = 'sha256=' + createHmac('sha256', appSecret).update(rawBody).digest('hex');
+
+  try {
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 // TypeScript interfaces for webhook payload
 interface WhatsAppContact {
@@ -51,8 +80,6 @@ export async function GET(
     const mode = searchParams.get('hub.mode');
     const verifyToken = searchParams.get('hub.verify_token');
     const challenge = searchParams.get('hub.challenge');
-    console.log("SEARCHPARAMS:", mode, verifyToken, challenge);
-
     console.log('Webhook verification attempt for token:', webhookToken?.substring(0, 8) + '...');
 
     if (mode !== 'subscribe') {
@@ -79,22 +106,8 @@ export async function GET(
       .eq('webhook_token', webhookToken)
       .single();
 
-      console.log("SETTINGS:", settings, error, webhookToken);
-
     if (error || !settings) {
       console.error('Webhook verification failed: webhook token not found');
-      console.error('Error details:', error);
-      console.error('Looking for webhook_token:', webhookToken);
-      
-      // Check if the column exists by trying to query all settings
-      const { data: allSettings, error: debugError } = await supabase
-        .from('user_settings')
-        .select('id, webhook_token')
-        .limit(1);
-      
-      console.error('Debug - Sample settings:', allSettings);
-      console.error('Debug - Query error:', debugError);
-      
       return new NextResponse('Forbidden', { status: 403 });
     }
 
@@ -249,7 +262,18 @@ export async function POST(
     const { token: webhookToken } = await params;
     // Using service role client to bypass RLS since webhook requests have no auth
     const supabase = createServiceRoleClient();
-    const body = await request.json();
+
+    // Read raw body text for signature verification before parsing
+    const rawBody = await request.text();
+
+    // Verify WhatsApp webhook signature
+    const isValidSignature = await verifyWebhookSignature(request, rawBody);
+    if (!isValidSignature) {
+      console.error('Webhook signature verification failed');
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+
+    const body = JSON.parse(rawBody);
 
     console.log('Received webhook payload for token:', webhookToken?.substring(0, 8) + '...');
 
@@ -267,18 +291,7 @@ export async function POST(
 
     if (settingsError || !userSettings) {
       console.error('No user found for webhook token:', webhookToken?.substring(0, 8) + '...');
-      console.error('Settings error:', settingsError);
-      
-      // Debug: Check if column exists
-      const { data: debugSettings, error: debugError } = await supabase
-        .from('user_settings')
-        .select('id, webhook_token')
-        .limit(1);
-      
-      console.error('Debug - Sample settings:', debugSettings);
-      console.error('Debug - Error:', debugError);
-      
-      // Still acknowledge to avoid retries
+      // Still acknowledge to avoid retries from WhatsApp
       return new NextResponse('OK', { status: 200 });
     }
 

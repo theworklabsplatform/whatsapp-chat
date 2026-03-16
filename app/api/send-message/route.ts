@@ -148,8 +148,8 @@ export async function POST(request: NextRequest) {
     // Match webhook schema: sender_id is phone number (who sent), receiver_id is user UUID (who received)
     const messageObject = {
       id: messageId || `outgoing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      sender_id: cleanPhoneNumber, // Your phone number (outgoing goes out from your phone)
-      receiver_id: user.id, // Recipient is the logged-in user (stored for conversation context)
+      sender_id: user.id, // Logged-in user is the sender
+      receiver_id: cleanPhoneNumber, // Contact's phone number is the receiver
       content: message,
       timestamp: timestamp,
       is_sent_by_me: true,
@@ -167,6 +167,22 @@ export async function POST(request: NextRequest) {
       message_type: messageObject.message_type
     });
 
+    // Ensure the sender (business owner) exists in the users table before inserting
+    // the message — the messages table has a FK on sender_id → users.id
+    const { error: userUpdateError } = await supabase
+      .from('users')
+      .upsert([{
+        id: user.id,
+        name: user.user_metadata?.full_name || user.email || 'Unknown User',
+        last_active: timestamp
+      }], {
+        onConflict: 'id'
+      });
+
+    if (userUpdateError) {
+      console.error('Error upserting sender in users table:', userUpdateError);
+    }
+
     // Store the sent message in our database
     const { data: insertedMessage, error: dbError } = await supabase
       .from('messages')
@@ -179,21 +195,6 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if database storage fails, message was already sent
     } else {
       console.log('Message stored successfully in database:', insertedMessage?.id);
-    }
-
-    // Update last_active for the sender (current user)
-    const { error: userUpdateError } = await supabase
-      .from('users')
-      .upsert([{
-        id: user.id,
-        name: user.user_metadata?.full_name || user.email || 'Unknown User',
-        last_active: timestamp
-      }], {
-        onConflict: 'id'
-      });
-
-    if (userUpdateError) {
-      console.error('Error updating user last_active:', userUpdateError);
     }
 
     // Return success response

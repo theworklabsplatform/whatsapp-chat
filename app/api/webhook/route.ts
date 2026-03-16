@@ -262,22 +262,6 @@ export async function POST(request: NextRequest) {
     
     if (settingsError || !userSettings) {
       console.error('No user found for phone_number_id:', phoneNumberIdStr);
-      console.error('Database error:', settingsError);
-      
-      // Debug: Let's check what phone_number_ids exist in the database
-      const { data: allSettings, error: debugError } = await supabase
-        .from('user_settings')
-        .select('id, phone_number_id')
-        .not('phone_number_id', 'is', null);
-      
-      if (!debugError && allSettings) {
-        console.log('Available phone_number_ids in database:', allSettings.map(s => ({
-          id: s.id,
-          phone_number_id: s.phone_number_id,
-          type: typeof s.phone_number_id
-        })));
-      }
-      
       // Still acknowledge the webhook to avoid retries
       return new NextResponse('OK', { status: 200 });
     }

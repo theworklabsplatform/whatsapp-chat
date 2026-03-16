@@ -293,8 +293,8 @@ export async function POST(request: NextRequest) {
 
     const messageObject = {
       id: messageId,
-      sender_id: to, // Recipient phone number (sender in DB)
-      receiver_id: user.id, // Current authenticated user (receiver in DB)
+      sender_id: user.id, // Current authenticated user (sender)
+      receiver_id: to, // Recipient phone number (receiver)
       content: displayContent,
       timestamp: timestamp,
       is_sent_by_me: true,
@@ -314,6 +314,13 @@ export async function POST(request: NextRequest) {
         buttons: processedComponents.buttons
       }),
     };
+
+    // Ensure sender exists in users table before inserting message (FK constraint)
+    await supabase.from('users').upsert([{
+      id: user.id,
+      name: user.user_metadata?.full_name || user.email || 'Unknown User',
+      last_active: timestamp
+    }], { onConflict: 'id' });
 
     const { error: dbError } = await supabase
       .from('messages')

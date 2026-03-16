@@ -282,8 +282,8 @@ export async function POST(request: NextRequest) {
         // Store in database
         const messageObject = {
           id: messageId || `outgoing_media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          sender_id: to, // Recipient phone number (sender in DB)
-          receiver_id: user.id, // Current authenticated user (receiver in DB)
+          sender_id: user.id, // Current authenticated user (sender)
+          receiver_id: to, // Recipient phone number (receiver)
           content: caption || `[${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)}]`,
           timestamp: timestamp,
           is_sent_by_me: true,
@@ -301,6 +301,13 @@ export async function POST(request: NextRequest) {
             whatsapp_media_id: mediaUpload.id,
           }),
         };
+
+        // Ensure sender exists in users table before inserting message (FK constraint)
+        await supabase.from('users').upsert([{
+          id: user.id,
+          name: user.user_metadata?.full_name || user.email || 'Unknown User',
+          last_active: timestamp
+        }], { onConflict: 'id' });
 
         const { error: dbError } = await supabase
           .from('messages')
@@ -329,10 +336,6 @@ export async function POST(request: NextRequest) {
         });
       }
     }
-
-    // Note: Removed user last_active update to avoid RLS policy issues
-    // The user's last_active will be updated by the webhook when they receive messages
-    // or by other parts of the application where the user context is clearer
 
     // Return results
     const successCount = results.filter(r => r.success).length;

@@ -62,7 +62,7 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -74,7 +74,19 @@ export function SignUpForm({
         },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+
+      // Insert into public.users only if we have a session (email verification disabled)
+      if (data.session && data.user) {
+        const { error: profileError } = await supabase.from("users").upsert({
+          id: data.user.id,
+          name: fullName,
+        }, { onConflict: "id" });
+        if (profileError) {
+          console.error("Failed to create user profile:", profileError);
+        }
+      }
+
+      router.push(data.session ? "/protected/setup" : "/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {

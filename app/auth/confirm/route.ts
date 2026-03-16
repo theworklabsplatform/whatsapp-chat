@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
@@ -12,11 +12,19 @@ export async function GET(request: NextRequest) {
   if (token_hash && type) {
     const supabase = await createClient();
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       type,
       token_hash,
     });
     if (!error) {
+      // Insert into public.users if this is a signup confirmation
+      if (type === "signup" && data.user) {
+        const serviceClient = createServiceRoleClient();
+        await serviceClient.from("users").upsert({
+          id: data.user.id,
+          name: data.user.user_metadata?.full_name || data.user.email || "User",
+        }, { onConflict: "id" });
+      }
       // redirect user to specified redirect URL or root of app
       redirect(next);
     } else {

@@ -145,11 +145,6 @@ export async function POST(request: NextRequest) {
         has_business_account_id: !!settings.business_account_id,
         has_verify_token: !!settings.verify_token,
         webhook_token: settings.webhook_token,
-        // Include actual values for display in setup page
-        access_token: settings.access_token,
-        phone_number_id: settings.phone_number_id,
-        business_account_id: settings.business_account_id,
-        verify_token: settings.verify_token,
       },
     });
 

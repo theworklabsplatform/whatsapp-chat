@@ -104,6 +104,13 @@ export async function POST(
       return result;
     };
 
+    // Ensure sender exists in users table before inserting messages (FK constraint)
+    await supabase.from('users').upsert([{
+      id: user.id,
+      name: user.user_metadata?.full_name || user.email || 'Unknown User',
+      last_active: timestamp
+    }], { onConflict: 'id' });
+
     // Send message to each member individually
     for (const member of members) {
       try {
@@ -272,8 +279,8 @@ export async function POST(
           
           const messageObject = {
             id: messageId,
-            sender_id: cleanPhoneNumber, // The recipient's phone number
-            receiver_id: user.id, // The broadcaster (current user)
+            sender_id: user.id, // The broadcaster (current user)
+            receiver_id: cleanPhoneNumber, // The recipient's phone number
             content: messageContent,
             timestamp: timestamp,
             is_sent_by_me: true, // Sent by the current user

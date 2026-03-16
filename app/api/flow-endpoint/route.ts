@@ -1,99 +1,119 @@
 import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * WhatsApp Flows endpoint.
+ *
+ * WhatsApp calls this endpoint when a user interacts with a Flow embedded
+ * in a WhatsApp message (sign-in, sign-up, etc.).
+ *
+ * IMPORTANT — Production checklist:
+ *  1. Implement WhatsApp Flows payload decryption using your RSA private key
+ *     (see https://developers.facebook.com/docs/whatsapp/flows/guides/implementingyourdataendpoint)
+ *  2. Verify the X-Hub-Signature-256 header using META_APP_SECRET
+ *  3. Encrypt the response payload before returning it to WhatsApp
+ *
+ * Until decryption/encryption is implemented this endpoint is NOT suitable
+ * for production WhatsApp Flows — it only works for testing with unencrypted
+ * payloads sent directly.
+ */
 export async function POST(request: NextRequest) {
   try {
-    // 1. Parse the request body
     const body = await request.json();
-    console.log('Received data from flow:', body);
-
     const { screen_id, data } = body;
-    const { flow_token, flow_cta } = body;
-    console.log("flow_token", flow_token);
-    console.log("flow_cta", flow_cta);
 
-    // 2. Handle the different screens of your flow
     if (screen_id === 'SIGN_IN') {
-      const { email, password } = data;
+      const { email, password } = data || {};
 
-      // TODO: Implement your sign-in logic here
-      // For example: Authenticate user against your database
-      // Let's assume a simple check for demonstration purposes
-      if (email === 'test@example.com' && password === 'password123') {
-        // Successful sign-in
-        return NextResponse.json({
-          version: '7.2',
-          screen: 'SIGN_IN', // Keep them on the same screen to show success
-          data: {
-            // Optional: you can pass a success message back
-            status_message: "Sign in successful! Redirecting...",
-          },
-          action: {
-            "name": "navigate",
-            "next_screen": "SUCCESS_SCREEN" // You need to define this screen in your flow JSON
-          }
-        });
-      } else {
-        // Failed sign-in
+      if (!email || !password) {
         return NextResponse.json({
           version: '7.2',
           screen: 'SIGN_IN',
-          data: {
-            email_error: "Invalid email or password.",
-          },
+          data: { email_error: 'Email and password are required.' },
         });
       }
-    } else if (screen_id === 'SIGN_UP') {
-      // const { first_name, last_name, email, password, confirm_password, terms_agreement, offers_acceptance } = data;
-      const { password, confirm_password } = data;
 
-      // TODO: Implement your sign-up logic here
-      // For example:
-      // - Validate inputs (e.g., password matches confirm_password)
-      // - Check if email already exists in your database
-      // - Create a new user account
-      console.log("Sign up data:", data);
-      
-      if (password !== confirm_password) {
-          return NextResponse.json({
-              version: '7.2',
-              screen: 'SIGN_UP',
-              data: {
-                  password_error: "Passwords do not match."
-              }
-          });
+      // Validate credentials against Supabase Auth using anon client
+      const supabase = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
+        { auth: { persistSession: false } }
+      );
+
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError) {
+        return NextResponse.json({
+          version: '7.2',
+          screen: 'SIGN_IN',
+          data: { email_error: 'Invalid email or password.' },
+        });
       }
 
-      console.log("Sign up successful!");
+      return NextResponse.json({
+        version: '7.2',
+        screen: 'SIGN_IN',
+        data: { status_message: 'Sign in successful!' },
+        action: { name: 'navigate', next_screen: 'SUCCESS_SCREEN' },
+      });
 
-      // If sign-up is successful
+    } else if (screen_id === 'SIGN_UP') {
+      const { email, password, confirm_password } = data || {};
+
+      if (!email || !password) {
+        return NextResponse.json({
+          version: '7.2',
+          screen: 'SIGN_UP',
+          data: { email_error: 'Email and password are required.' },
+        });
+      }
+
+      if (password !== confirm_password) {
+        return NextResponse.json({
+          version: '7.2',
+          screen: 'SIGN_UP',
+          data: { password_error: 'Passwords do not match.' },
+        });
+      }
+
+      // Create new user via Supabase anon client
+      const supabase = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
+        { auth: { persistSession: false } }
+      );
+
+      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+
+      if (signUpError) {
+        return NextResponse.json({
+          version: '7.2',
+          screen: 'SIGN_UP',
+          data: { email_error: signUpError.message },
+        });
+      }
+
       return NextResponse.json({
         version: '7.2',
         screen: 'SIGN_UP',
-        data: {
-          status_message: "Sign up successful! Please check your email."
-        }
+        data: { status_message: 'Account created! Please check your email to confirm.' },
       });
     }
 
-    // 3. Handle any other screens or default responses
+    // Default response for unhandled screens
     return NextResponse.json({
       version: '7.2',
       screen: screen_id,
-      data: {
-        status_message: "Thank you for your submission!"
-      }
+      data: { status_message: 'Received.' },
     });
 
   } catch (error) {
     console.error('Error processing flow data:', error);
-    // Return a generic error response to the user
     return NextResponse.json({
       version: '7.2',
       screen: 'SIGN_IN',
-      data: {
-        error_message: "An unexpected error occurred. Please try again later."
-      }
+      data: { error_message: 'An unexpected error occurred. Please try again later.' },
     });
   }
 }

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const markedCount = data || 0;
+    const markedCount = Array.isArray(data) ? data.length : (typeof data === 'number' ? data : 0);
     console.log(`Marked ${markedCount} messages as read`);
 
     return NextResponse.json({

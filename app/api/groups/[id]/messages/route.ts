@@ -36,12 +36,13 @@ export async function GET(
       );
     }
 
-    // Get all messages that are broadcast messages for this group
-    // These are messages where media_data contains broadcast_group_id = groupId
+    // Broadcast messages are stored as outgoing: sender_id = user.id, receiver_id = phone number.
+    // Fetch all messages sent by this user, then filter by broadcast_group_id in media_data.
     const { data: messages, error: messagesError } = await supabase
       .from('messages')
       .select('*')
-      .eq('receiver_id', user.id)
+      .eq('sender_id', user.id)
+      .eq('is_sent_by_me', true)
       .order('timestamp', { ascending: true });
 
     if (messagesError) {
@@ -53,12 +54,11 @@ export async function GET(
     }
 
     // Filter messages that belong to this broadcast group
-    // Check if media_data contains broadcast_group_id matching our groupId
     const broadcastMessages = messages?.filter(msg => {
       if (!msg.media_data) return false;
       try {
-        const mediaData = typeof msg.media_data === 'string' 
-          ? JSON.parse(msg.media_data) 
+        const mediaData = typeof msg.media_data === 'string'
+          ? JSON.parse(msg.media_data)
           : msg.media_data;
         return mediaData.broadcast_group_id === groupId;
       } catch {
@@ -66,28 +66,27 @@ export async function GET(
       }
     }) || [];
 
-    // Group messages by their timestamp to identify unique broadcasts
-    // (same broadcast sent to multiple people will have same timestamp)
-    const uniqueBroadcasts = new Map();
+    // Deduplicate: the same broadcast produces one DB row per recipient.
+    // Use content + timestamp as the deduplication key so we show one entry per send.
+    const uniqueBroadcasts = new Map<string, typeof broadcastMessages[0]>();
     broadcastMessages.forEach(msg => {
-      const key = msg.timestamp; // Use timestamp as key to group same broadcast
-      if (!uniqueBroadcasts.has(key) || msg.id < uniqueBroadcasts.get(key).id) {
-        // Keep the first message (or the one with smallest ID) for each timestamp
+      const key = `${msg.timestamp}__${msg.content}`;
+      if (!uniqueBroadcasts.has(key)) {
         uniqueBroadcasts.set(key, msg);
       }
     });
 
-    // Convert map to array and format for display
+    // Format for display — all are sent by the current user
     const formattedMessages = Array.from(uniqueBroadcasts.values()).map(msg => ({
       id: msg.id,
       sender_id: msg.sender_id,
       receiver_id: msg.receiver_id,
       content: msg.content,
       timestamp: msg.timestamp,
-      is_sent_by_me: true, // All broadcast messages are sent by the user
+      is_sent_by_me: true,
       message_type: msg.message_type,
       media_data: msg.media_data,
-      is_read: true
+      is_read: true,
     }));
 
     return NextResponse.json({

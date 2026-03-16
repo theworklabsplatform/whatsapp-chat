@@ -149,7 +149,7 @@ export function UserList({ users, selectedUser, onUserSelect, currentUserId, onU
   };
 
   // Sort users by last message time (most recent first) and then by unread count
-  const sortedUsers = users
+  const sortedUsers = Array.from(new Map(users.map(u => [u.id, u])).values())
     .filter(user => user.id !== currentUserId)
     .sort((a, b) => {
       // First, prioritize users with unread messages

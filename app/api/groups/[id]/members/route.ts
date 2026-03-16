@@ -107,15 +107,15 @@ export async function POST(
       );
     }
 
-    // Add members (duplicates will be ignored due to unique constraint)
     const members = userIds.map(userId => ({
       group_id: groupId,
       user_id: userId,
     }));
 
+    // Use upsert so that adding an already-existing member is a no-op, not a 500
     const { data, error: insertError } = await supabase
       .from('group_members')
-      .insert(members)
+      .upsert(members, { onConflict: 'group_id,user_id', ignoreDuplicates: true })
       .select();
 
     if (insertError) {
