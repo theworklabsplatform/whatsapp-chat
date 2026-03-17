@@ -120,6 +120,7 @@ export function ChatWindow({
   const [messageInput, setMessageInput] = useState("");
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
   const [refreshingUrls, setRefreshingUrls] = useState<Set<string>>(new Set());
+  const [failedMedia, setFailedMedia] = useState<Set<string>>(new Set());
   const [loadingMedia, setLoadingMedia] = useState<Set<string>>(new Set());
   const [audioDurations, setAudioDurations] = useState<{ [key: string]: number }>({});
   const [audioCurrentTime, setAudioCurrentTime] = useState<{ [key: string]: number }>({});
@@ -546,6 +547,12 @@ export function ChatWindow({
                     </div>
                   </div>
                 )}
+                {failedMedia.has(message.id) ? (
+                  <div className="flex items-center gap-3 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl">
+                    <ImageIcon className="h-8 w-8 text-gray-400" />
+                    <span className="text-xs text-gray-500">Image unavailable</span>
+                  </div>
+                ) : (
                 <Image
                   src={mediaData.media_url}
                   alt={mediaData.caption || "Shared image"}
@@ -557,15 +564,15 @@ export function ChatWindow({
                   onLoadingComplete={() => handleMediaLoad(message.id)}
                   onLoadStart={() => handleMediaLoadStart(message.id)}
                   onError={() => {
-                    console.log('Next.js Image failed to load, attempting to refresh URL');
                     handleMediaLoad(message.id);
-                    refreshMediaUrl(message.id);
+                    setFailedMedia(prev => new Set(prev).add(message.id));
                   }}
                   priority={false}
                   placeholder="blur"
                   blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+Rq19G9D/Z"
                   unoptimized={false}
                 />
+                )}
                 {isRefreshing && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl">
                     <RefreshCw className="h-6 w-6 text-white animate-spin" />
@@ -766,21 +773,27 @@ export function ChatWindow({
                     </div>
                   </div>
                 )}
-                <video 
+                {failedMedia.has(message.id) ? (
+                  <div className="flex items-center gap-3 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl">
+                    <Play className="h-8 w-8 text-gray-400" />
+                    <span className="text-xs text-gray-500">Video unavailable</span>
+                  </div>
+                ) : (
+                <video
                   controls
                   className="max-w-[400px] max-h-[300px] w-auto h-auto rounded-xl"
                   preload="metadata"
                   onLoadStart={() => handleMediaLoadStart(message.id)}
                   onCanPlay={() => handleMediaLoad(message.id)}
                   onError={() => {
-                    console.log('Video failed to load, attempting to refresh URL');
                     handleMediaLoad(message.id);
-                    refreshMediaUrl(message.id);
+                    setFailedMedia(prev => new Set(prev).add(message.id));
                   }}
                 >
                   <source src={mediaData.media_url} type={mediaData.mime_type} />
                   Your browser does not support the video tag.
                 </video>
+                )}
                 {isRefreshing && (
                   <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-xl z-20">
                     <RefreshCw className="h-6 w-6 text-white animate-spin" />
