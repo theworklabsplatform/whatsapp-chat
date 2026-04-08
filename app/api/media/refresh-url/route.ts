@@ -62,14 +62,24 @@ export async function POST(request: NextRequest) {
       return new NextResponse('Media data incomplete', { status: 400 });
     }
 
-    // Determine which identifier was used as the S3 owner when the media was stored
-    const ownerIdForS3 = message.is_sent_by_me ? message.receiver_id : message.sender_id;
+    // Determine which identifier was used as the S3 owner/folder when the media was stored
+    // Outgoing messages use the sender's UUID. Incoming messages use the sender's phone number.
+    const rawSenderId = message.sender_id;
+    
+    // Sanitize the sender ID if it's a phone number (incoming)
+    // UUIDs (outgoing) are used as-is, while phone numbers are numeric only in S3
+    const sanitizedSenderId = rawSenderId.includes('-') 
+      ? rawSenderId 
+      : rawSenderId.replace(/[^0-9]/g, '');
 
-    // Generate new pre-signed URL
+    console.log(`Refreshing URL for message ${messageId}. S3 Path: ${sanitizedSenderId}/${mediaData.id}`);
+
+    // Generate new pre-signed URL (7 days expiration)
     const newUrl = await generatePresignedUrl(
-      ownerIdForS3,
+      sanitizedSenderId,
       mediaData.id,
-      mediaData.mime_type
+      mediaData.mime_type,
+      604800 // 7 days
     );
 
     if (!newUrl) {

@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const next = searchParams.get("next") ?? "/";
+  const code = searchParams.get("code");
 
   if (token_hash && type) {
     const supabase = await createClient();
@@ -26,13 +27,24 @@ export async function GET(request: NextRequest) {
         }, { onConflict: "id" });
       }
       // redirect user to specified redirect URL or root of app
-      redirect(next);
+      return redirect(next);
     } else {
       // redirect the user to an error page with some instructions
-      redirect(`/auth/error?error=${error?.message}`);
+      return redirect(`/auth/error?error=${error?.message}`);
+    }
+  }
+
+  // Handle PKCE code exchange
+  if (code) {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error) {
+      return redirect(next);
+    } else {
+      return redirect(`/auth/error?error=${error?.message}`);
     }
   }
 
   // redirect the user to an error page with some instructions
-  redirect(`/auth/error?error=No token hash or type`);
+  return redirect(`/auth/error?error=No token hash, type, or code`);
 }

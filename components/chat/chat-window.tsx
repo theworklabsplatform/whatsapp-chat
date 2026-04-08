@@ -537,7 +537,7 @@ export function ChatWindow({
       case 'image':
         return (
           <div className={baseClasses}>
-            {mediaData?.media_url && mediaData.s3_uploaded ? (
+            {mediaData?.media_url ? (
               <div className="mb-2 relative overflow-hidden rounded-xl">
                 {isMediaLoading && (
                   <div className="absolute inset-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center rounded-xl">
@@ -555,21 +555,25 @@ export function ChatWindow({
                 ) : (
                 <Image
                   src={mediaData.media_url}
-                  alt={mediaData.caption || "Shared image"}
+                  alt={mediaData?.caption || "Shared image"}
                   width={300}
                   height={200}
                   className="max-w-[300px] max-h-[400px] w-auto h-auto object-cover cursor-pointer rounded-xl"
                   style={{ maxWidth: '100%', height: 'auto' }}
-                  onClick={() => window.open(mediaData.media_url, '_blank')}
+                  onClick={() => mediaData?.media_url && window.open(mediaData!.media_url, '_blank')}
                   onLoadingComplete={() => handleMediaLoad(message.id)}
                   onLoadStart={() => handleMediaLoadStart(message.id)}
                   onError={() => {
                     handleMediaLoad(message.id);
+                    // Automatically trigger refresh if not already refreshing
+                    if (!isRefreshing) {
+                      refreshMediaUrl(message.id);
+                    }
                     setFailedMedia(prev => new Set(prev).add(message.id));
                   }}
                   priority={false}
                   placeholder="blur"
-                  blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+Rq19G9D/Z"
+                  blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACE/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+Rq19G9D/Z"
                   unoptimized={false}
                 />
                 )}
@@ -639,7 +643,7 @@ export function ChatWindow({
                   <p className="text-xs text-blue-500 mt-1">Preparing download...</p>
                 )}
               </div>
-              {mediaData?.media_url && mediaData.s3_uploaded && (
+              {mediaData?.media_url && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -692,7 +696,7 @@ export function ChatWindow({
                 variant="ghost"
                 className={`p-3 rounded-full ${isOwn ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-500 hover:bg-blue-600'} text-white`}
                 onClick={() => mediaData?.media_url && handleAudioPlay(message.id, mediaData.media_url)}
-                disabled={!mediaData?.media_url || !mediaData.s3_uploaded || isRefreshing}
+                disabled={!mediaData?.media_url || isRefreshing}
               >
                 {isRefreshing ? (
                   <RefreshCw className="h-5 w-5 animate-spin" />
@@ -709,7 +713,7 @@ export function ChatWindow({
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {mediaData?.voice ? 'Voice Message' : 'Audio'}
                   </span>
-                  {(!mediaData?.media_url || !mediaData.s3_uploaded) && (
+                  {!mediaData?.media_url && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -760,10 +764,10 @@ export function ChatWindow({
               </div>
               );
 
-              case 'video':
+      case 'video':
         return (
           <div className={baseClasses}>
-            {mediaData?.media_url && mediaData.s3_uploaded ? (
+            {mediaData?.media_url ? (
               <div className="mb-2 relative overflow-hidden rounded-xl max-w-[400px] max-h-[300px]">
                 {isMediaLoading && (
                   <div className="absolute inset-0 bg-gray-200 dark:bg-gray-700 flex items-center justify-center rounded-xl z-10">
@@ -787,10 +791,14 @@ export function ChatWindow({
                   onCanPlay={() => handleMediaLoad(message.id)}
                   onError={() => {
                     handleMediaLoad(message.id);
+                    // Automatically trigger refresh if not already refreshing
+                    if (!isRefreshing) {
+                      refreshMediaUrl(message.id);
+                    }
                     setFailedMedia(prev => new Set(prev).add(message.id));
                   }}
                 >
-                  <source src={mediaData.media_url} type={mediaData.mime_type} />
+                  <source src={mediaData.media_url} type={mediaData?.mime_type} />
                   Your browser does not support the video tag.
                 </video>
                 )}
@@ -869,7 +877,10 @@ export function ChatWindow({
                         className="max-w-full h-auto rounded-lg"
                         preload="metadata"
                       >
-                        <source src={mediaData.header.media_url} type="video/mp4" />
+                        <source 
+                          src={mediaData.header.media_url} 
+                          type="video/mp4" 
+                        />
                         Your browser does not support the video tag.
                       </video>
                     </div>

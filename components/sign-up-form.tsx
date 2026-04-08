@@ -75,16 +75,18 @@ export function SignUpForm({
       });
       if (error) throw error;
 
-      // Insert into public.users only if we have a session (email verification disabled)
+      // If email verification is disabled in Supabase, data.session will be present immediately.
+      // If it's enabled, data.session will be null and the user must verify their email.
       if (data.session && data.user) {
         const { error: profileError } = await supabase.from("users").upsert({
           id: data.user.id,
           name: fullName,
         }, { onConflict: "id" });
         if (profileError) {
-          console.error("Failed to create user profile:", profileError);
+          console.error("Failed to create user profile during sign-up:", profileError);
         }
       }
+
 
       router.push(data.session ? "/protected/setup" : "/auth/sign-up-success");
     } catch (error: unknown) {
